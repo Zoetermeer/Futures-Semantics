@@ -1,5 +1,10 @@
+require "modules/substitution.k"
+
 module FUTURES
-  syntax AExp   ::= Int 
+  imports SUBSTITUTION
+
+  syntax AExp   ::= Int
+                  | Id 
                   | "(" "+" AExp AExp ")"       [left, strict]
                   | "(" "-" AExp AExp ")"       [left, strict]
                   | "(" "*" AExp AExp ")"       [left, strict]
@@ -8,18 +13,26 @@ module FUTURES
   syntax BExp   ::= Bool
                   | "#t"
                   | "#f"
+                  | Id
                   | "(" "<=" AExp AExp ")"      [left, strict]
                   | "(" "not" BExp ")"          [strict]
                   | "(" "and" BExp BExp ")"     [left, strict]
-  syntax LExp   ::= "(" "let" "(" 
+  syntax Dec    ::= "[" Id Exp "]"              [strict(2)]
+  //syntax Decs   ::= List{Dec}
+  //For now, `let' can only bind one id
+  syntax LExp   ::= "(" "let" "(" Dec ")" Exp ")"
+
+  //Future-specific stuff
   syntax Thunk  ::= "(" "lambda" "()" Exp ")" 
   syntax FExp   ::= "(" "future" Thunk ")"
   syntax TExp   ::= "(" "touch" Id ")"  
                   | "(" "touch" FExp ")"
-  syntax Exp    ::= AExp 
+  syntax Exp    ::= Id
+                  | AExp 
                   | BExp
                   | FExp
                   | TExp
+                  | LExp
   //syntax Stmt   ::= "(" Id Exp ")"              
   //                | "[" Id Exp "]"              
   //syntax Pgm ::= "(" "let" "(" Stmt ")" Exp ")" 
@@ -36,6 +49,8 @@ module FUTURES
   rule <k> (/ I1:Int 0) ...</k> => <k> "error" </k>
   //rule (/ I1:Int I2:Int) => I1 /Int I2 
   rule (if true E1:AExp _) => E1
+
+  rule (let ([X:Id XE:Exp]) Body:Exp) => Body[XE / X]
 
   //Sequential for now
   rule (lambda () E:Exp) => E 
