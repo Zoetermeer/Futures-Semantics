@@ -33,7 +33,7 @@ module FUTURES
   syntax Void   ::= "void"
 
   //Future-specific stuff
-  syntax Thunk  ::= "(" "lambda" "()" Exp ")" 
+  syntax Thunk  ::= "(" "lambda" "()" Exps ")"
   syntax FExp   ::= "(" "future" Thunk ")"    
   syntax FDesc  ::= "fd" Nat                  
   syntax Barr   ::= "barricade"
@@ -59,8 +59,16 @@ module FUTURES
   rule (+ I1:Int I2:Int ) => I1 +Int I2
   rule (- I1:Int I2:Int ) => I1 -Int I2
   rule (* I1:Int I2:Int ) => I1 *Int I2
-  rule <k> (/ I1:Int 0) ...</k> => <k> "error: div0" </k>
-  //rule (/ I1:Int I2:Int) => I1 /Int I2 
+  //rule  <k> (/ I1:Int 0) ...</k> => <k> "error: div0" </k>
+  //      <id> 0 </id>
+
+  rule <k> (/ I1:Int 0) => barricade ~> (/ I1:Int 0) ... </k>
+  //rule  <k> (/ I1:Int 0) ... </k> => <k> barricade ~> (/ I1:Int 0) ... </k>
+
+  rule <k> barricade ~> (/ I1:Int 0) => "error: div0" </k>
+        <future> ... <id> 0 </id> ... </future> 
+
+  rule (/ I1:Int I2:Int) => I1 /Int I2 when I2 =/=Int 0
   rule (if true E1:AExp _) => E1
 
   //Variable assignment
@@ -79,8 +87,7 @@ module FUTURES
         <store> ... . => N |-> V </store>
     when fresh(N:Nat)
 
-  //If a value at the front of the chain, 
-  //stash as the current 'return value'
+  //Evaluating multiple expressions
   rule  <k> V:Val ~> Es:Exps => Es ... </k>
         <retval> _ => V </retval>
 
@@ -91,7 +98,7 @@ module FUTURES
   rule E:Exp ES:Exps => E ~> ES [structural]
 
   //Application
-  rule (lambda () E:Exp) => E 
+  rule (lambda () Es:Exps) => Es 
   
   //If all futures are sequential...
   //rule (future T:Thunk) => T
@@ -103,13 +110,19 @@ module FUTURES
               </future>) 
     when fresh(N:Nat)
 
-  //Always execute (touch (future ...))
-  //sequentially?
+  //Always execute (touch (future ...)) sequentially?
   rule (touch F:FExp) => (F)
 
   //Touch a future which has finished 
   //evaluating its thunk
   rule <k> (touch fd N:Nat) => V:Val ... </k> 
     <future> ... <k> V </k> <id> N </id> ... </future>
+
+  //Barricaded ft: need to match on id of the 
+  //current config, and also match on the k-cell
+  //of the ft config with id N.  How?
+  rule <k> (touch fd N:Nat) => Es:Exprs ... </k>
+    <future> ... <k> barricade ~> Es ... </k> <id> N </id> ... </future>
+
 
 endmodule
