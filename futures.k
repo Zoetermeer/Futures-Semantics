@@ -5,6 +5,7 @@ module FUTURES
                       <k color="blue"> $PGM:Exp </k>
                       <env color="gray"> .Map </env>
                       <id color="magenta"> 0 </id>
+                      <retval color="brown"> void </retval>
                     </future>
                   </futures>
                   <store color="red"> .Map </store>
@@ -26,12 +27,10 @@ module FUTURES
                   | "(" "and" BExp BExp ")"   [left, strict]
   
   //For now, `let' can only bind one id
-  syntax LBody  ::= Exp
-                  > Stmt Exp                   [strict(1)]
-  syntax LExp   ::= "(" "let" "(" "[" Id Exp "]" ")" LBody ")" [strict(2)]
-  syntax Stmt   ::= "(" "set!" Id Exp ")"
-                  | "skip"
-                  > Stmt Stmt                 [left]
+  syntax Exps  ::= List{Exp,""}
+  syntax LExp   ::= "(" "let" "(" "[" Id Exp "]" ")" Exps ")" [strict(2)]
+  syntax SetExp ::= "(" "set!" Id Exp ")"     [strict(2)]
+  syntax Void   ::= "void"
 
   //Future-specific stuff
   syntax Thunk  ::= "(" "lambda" "()" Exp ")" 
@@ -47,8 +46,10 @@ module FUTURES
                   | FExp
                   | TExp
                   | LExp
+                  | SetExp
+                  | Void
                   | FDesc
-  syntax Val    ::= Int | Bool | FDesc 
+  syntax Val    ::= Int | Bool | Void | FDesc 
   syntax KResult ::= Val
 
   rule #t => true
@@ -63,7 +64,7 @@ module FUTURES
   rule (if true E1:AExp _) => E1
 
   //Variable assignment
-  rule  <k> (set! X:Id V:Val) => . ... </k>
+  rule  <k> (set! X:Id V:Val) => void ... </k>
         <env> ... X |-> N ... </env>
         <store> ... N |-> (_ => V) ... </store>
 
@@ -73,18 +74,28 @@ module FUTURES
         <store> ... ADDR |-> I ... </store>
 
   //Variable declaration
-  rule  <k> (let ([X:Id V:Val]) Body:LBody) => Body ... </k>
+  rule  <k> (let ([X:Id V:Val]) Body:Exps) => Body ... </k>
         <env> Rho:Map => Rho[N/X] </env>
         <store> ... . => N |-> V </store>
     when fresh(N:Nat)
 
-  rule S1 S2 => S1 ~> S2 [structural]
+  //If a value at the front of the chain, 
+  //stash as the current 'return value'
+  rule  <k> V:Val ~> Es:Exps => Es ... </k>
+        <retval> _ => V </retval>
 
-  //Sequential for now
+  rule  <k> . => V:Val </k>
+        <retval> V </retval>
+
+  rule .Exps => .
+  rule E:Exp ES:Exps => E ~> ES [structural]
+
+  //Application
   rule (lambda () E:Exp) => E 
+  
+  //If all futures are sequential...
   //rule (future T:Thunk) => T
   
-  //rule (future T:Thunk) => 22
   rule  <k> (future T:Thunk) => fd N ... </k> <env> Rho </env>
         (. => <future> ... <k> T </k> 
                 <env> Rho </env>

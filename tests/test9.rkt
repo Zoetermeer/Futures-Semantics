@@ -1,0 +1,8 @@
+(let ([x 42])
+  (let ([f1 (future (λ () 
+                     (set! x 10)))])
+    (let ([f2 (future (λ () 
+                        (set! x 20)))])
+      (touch f1)
+      (touch f2)
+      (+ 0 x))))
