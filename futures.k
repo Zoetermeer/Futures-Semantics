@@ -1,7 +1,12 @@
 module FUTURES
-  configuration <T color="green">
-                  <k color="blue"> $PGM:Exp </k>
-                  <env color="gray"> .Map </env>
+  configuration <T color="purple">
+                  <futures color="green">
+                    <future multiplicity="*" color="pink">
+                      <k color="blue"> $PGM:Exp </k>
+                      <env color="gray"> .Map </env>
+                      <id color="magenta"> 0 </id>
+                    </future>
+                  </futures>
                   <store color="red"> .Map </store>
                 </T>
 
@@ -30,16 +35,20 @@ module FUTURES
 
   //Future-specific stuff
   syntax Thunk  ::= "(" "lambda" "()" Exp ")" 
-  syntax FExp   ::= "(" "future" Thunk ")"    [strict]
-  syntax TExp   ::= "(" "touch" Id ")"  
-                  | "(" "touch" FExp ")"
+  syntax FExp   ::= "(" "future" Thunk ")"    
+  syntax FDesc  ::= "fd" Nat                  
+  syntax Barr   ::= "barricade"
+  syntax TExp   ::= "(" "touch" Id ")"        [strict] 
+                  | "(" "touch" FExp ")" 
+                  | "(" "touch" FDesc ")"     [strict]
   syntax Exp    ::= Id
                   | AExp 
                   | BExp
                   | FExp
                   | TExp
                   | LExp
-  syntax Val    ::= Int | Bool | FExp 
+                  | FDesc
+  syntax Val    ::= Int | Bool | FDesc 
   syntax KResult ::= Val
 
   rule #t => true
@@ -73,10 +82,23 @@ module FUTURES
 
   //Sequential for now
   rule (lambda () E:Exp) => E 
-  rule (future T:Thunk) => T
+  //rule (future T:Thunk) => T
+  
+  //rule (future T:Thunk) => 22
+  rule  <k> (future T:Thunk) => fd N ... </k> <env> Rho </env>
+        (. => <future> ... <k> T </k> 
+                <env> Rho </env>
+                <id> N </id>
+              </future>) 
+    when fresh(N:Nat)
 
   //Always execute (touch (future ...))
   //sequentially?
   rule (touch F:FExp) => (F)
+
+  //Touch a future which has finished 
+  //evaluating its thunk
+  rule <k> (touch fd N:Nat) => V:Val ... </k> 
+    <future> ... <k> V </k> <id> N </id> ... </future>
 
 endmodule
