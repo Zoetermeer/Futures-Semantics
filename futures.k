@@ -4,7 +4,7 @@ module FUTURES
                     <future multiplicity="*" color="pink">
                       <k color="blue"> $PGM:Exp </k>
                       <env color="gray"> .Map </env>
-                      <id color="magenta"> 0 </id>
+                      <id color="magenta"> "runtime" </id>
                       <retval color="brown"> void </retval>
                     </future>
                   </futures>
@@ -27,14 +27,15 @@ module FUTURES
                   | "(" "and" BExp BExp ")"   [left, strict]
   
   //For now, `let' can only bind one id
-  syntax Exps  ::= List{Exp,""}
+  syntax Exps   ::= List{Exp,""}
   syntax LExp   ::= "(" "let" "(" "[" Id Exp "]" ")" Exps ")" [strict(2)]
   syntax SetExp ::= "(" "set!" Id Exp ")"     [strict(2)]
   syntax Void   ::= "void"
 
   //Future-specific stuff
-  syntax Thunk  ::= "(" "lambda" "()" Exps ")"
-  syntax FExp   ::= "(" "future" Thunk ")"    
+  syntax ThkExp ::= "(" "lambda" "()" Exps ")"
+  syntax Thunk  ::= "thunk" Exps
+  syntax FExp   ::= "(" "future" ThkExp ")"    
   syntax FDesc  ::= "fd" Nat                  
   syntax Barr   ::= "barricade"
   syntax TExp   ::= "(" "touch" Id ")"        [strict] 
@@ -59,14 +60,11 @@ module FUTURES
   rule (+ I1:Int I2:Int ) => I1 +Int I2
   rule (- I1:Int I2:Int ) => I1 -Int I2
   rule (* I1:Int I2:Int ) => I1 *Int I2
-  //rule  <k> (/ I1:Int 0) ...</k> => <k> "error: div0" </k>
-  //      <id> 0 </id>
 
   rule <k> (/ I1:Int 0) => barricade ~> (/ I1:Int 0) ... </k>
-  //rule  <k> (/ I1:Int 0) ... </k> => <k> barricade ~> (/ I1:Int 0) ... </k>
 
   rule <k> barricade ~> (/ I1:Int 0) => "error: div0" </k>
-        <future> ... <id> 0 </id> ... </future> 
+        <future> ... <id> "runtime" </id> ... </future> 
 
   rule (/ I1:Int I2:Int) => I1 /Int I2 when I2 =/=Int 0
   rule (if true E1:AExp _) => E1
@@ -94,34 +92,39 @@ module FUTURES
   rule  <k> . => V:Val </k>
         <retval> V </retval>
 
-  rule .Exps => .
-  rule E:Exp ES:Exps => E ~> ES [structural]
+  rule .Exps => .                           [structural]
+  rule E:Exp ES:Exps => E ~> ES             [structural]
 
   //Application
-  rule (lambda () Es:Exps) => Es 
+  rule (lambda () Es:Exps) => thunk Es
+  rule (thunk Es:Exps) => Es
   
   //If all futures are sequential...
-  //rule (future T:Thunk) => T
+  //rule (future T:Thunk) => (T)
   
-  rule  <k> (future T:Thunk) => fd N ... </k> <env> Rho </env>
-        (. => <future> ... <k> T </k> 
+  rule  <k> (future TE:ThkExp) => fd N ... </k> <env> Rho </env>
+        (. => <future> ... <k> (TE) </k> 
                 <env> Rho </env>
                 <id> N </id>
               </future>) 
     when fresh(N:Nat)
 
   //Always execute (touch (future ...)) sequentially?
-  rule (touch F:FExp) => (F)
+  rule (touch (future TE:ThkExp)) => (TE)
 
   //Touch a future which has finished 
   //evaluating its thunk
   rule <k> (touch fd N:Nat) => V:Val ... </k> 
     <future> ... <k> V </k> <id> N </id> ... </future>
 
+  //Touching on a worker thread barricades
+  rule  <k> (touch fd N) => barricade ~> (touch fd N:Nat) ... </k>
+        <future> ... <id> N:Nat </id> ... </future> 
+
   //Barricaded ft: need to match on id of the 
-  //current config, and also match on the k-cell
+  //current config ("runtime"), and also match on the k-cell
   //of the ft config with id N.  How?
-  rule <k> (touch fd N:Nat) => Es:Exprs ... </k>
+  rule <k> (touch fd N:Nat) => Es:Exps ... </k>
     <future> ... <k> barricade ~> Es ... </k> <id> N </id> ... </future>
 
 
