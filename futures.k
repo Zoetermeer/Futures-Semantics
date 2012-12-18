@@ -30,7 +30,7 @@ module FUTURES
                   | "{" Exp "}"                               [strict]
                   | "{" "#%app" Thunk "}"                     [strict]
                   | "{" "future" Exp "}"                      [strict]
-                  | "{" "touch" Exp "}"        
+                  | "{" "touch" Exp "}"                       [strict]
                   | "{" "debug-print" Exp "}"                 [strict]
   syntax Void     ::= "{" "void" "}"
 
@@ -43,17 +43,17 @@ module FUTURES
   syntax KResult ::= Val
 
   rule <k> {debug-print I:Int} => {void} ... </k>
-       <out> ... . => ListItem(I) ListItem("\n") </out>  
+       <out> ... . => ListItem(I) ListItem("\n") </out>               [print-int] 
   rule <k> {debug-print true} => {void} ... </k>
-       <out> ... . => ListItem("#t") ListItem("\n") </out>
+       <out> ... . => ListItem("#t") ListItem("\n") </out>            [print-true]
   rule <k> {debug-print false} => {void} ... </k>
-       <out> ... . => ListItem("#f") ListItem("\n") </out>
+       <out> ... . => ListItem("#f") ListItem("\n") </out>            [print-false]
   rule <k> {debug-print V:Void} => {void} ... </k>
-       <out> ... . => ListItem("#<void>") ListItem("\n") </out>
+       <out> ... . => ListItem("#<void>") ListItem("\n") </out>       [print-void]
   rule <k> {debug-print F:FDesc} => {void} ... </k>
-       <out> ... . => ListItem("#<future>") ListItem("\n") </out>
+       <out> ... . => ListItem("#<future>") ListItem("\n") </out>     [print-future]
   rule <k> {debug-print T:Thunk} => {void} ... </k>
-       <out> ... . => ListItem("#<procedure>") ListItem("\n") </out>
+       <out> ... . => ListItem("#<procedure>") ListItem("\n") </out>  [print-thunk]
 
   rule {not B:Bool} => notBool B
   rule {+ I1:Int I2:Int } => I1 +Int I2
@@ -74,7 +74,7 @@ module FUTURES
 
   rule <k> {set! X:Id V:Val} => {void} ... </k>
        <env> ... X |-> N ... </env>
-       <store> ... N |-> (_ => V) ... </store>
+       <store> ... N |-> (_ => V) ... </store>          [assignment]
 
   //Lookup
   rule <k> X:Id => V ... </k>
@@ -83,8 +83,16 @@ module FUTURES
 
   rule {begin V:Val E:Exp} => E
   rule {lambda {} E:Exp} => thunk E
-  //rule {#%app (thunk E:Exp)} => E
   rule { (thunk E:Exp) } => E 
+
+  rule <k> {future (thunk E:Exp)} => fd N ... </k> 
+       <env> Rho </env>
+       (. =>  <future>...
+                <k> E </k>
+                <env> Rho </env>
+                <id> N </id>
+              </future>)
+    when fresh(N:Nat)
 
   /*
   
