@@ -14,32 +14,33 @@ module FUTURES
   syntax Exp   ::=  Int
                   | Id 
                   | Bool
-                  | "{" "+" Exp Exp "}"                       [seqstrict]
-                  | "{" "-" Exp Exp "}"                       [seqstrict]
-                  | "{" "*" Exp Exp "}"                       [seqstrict]
-                  | "{" "/" Exp Exp "}"                       [seqstrict]
-                  | "{" "if" Exp Exp Exp "}"                  [strict(1)]
-                  | "{" "<=" Exp Exp "}"                      [seqstrict]
-                  | "{" "not" Exp "}"                         [strict]
-                  | "{" "and" Exp Exp "}"                     [strict(1)]
-                  | "{" "let" "{" "[" Id Exp "]" "}" Exp "}"  [strict(2)]
-                  | "{" "set!" Id Exp "}"                     [strict(2)]
+                  | String
+                  | "{" "+" Exp Exp "}"                               [seqstrict]
+                  | "{" "-" Exp Exp "}"                               [seqstrict]
+                  | "{" "*" Exp Exp "}"                               [seqstrict]
+                  | "{" "/" Exp Exp "}"                               [seqstrict]
+                  | "{" "if" Exp Exp Exp "}"                          [strict(1)]
+                  | "{" "<=" Exp Exp "}"                              [seqstrict]
+                  | "{" "not" Exp "}"                                 [strict]
+                  | "{" "and" Exp Exp "}"                             [strict(1)]
+                  | "{" "let" "{" "[" Id Exp "]" "}" Exp "}"          [strict(2)]
+                  | "{" "set!" Id Exp "}"                             [strict(2)]
                   | Void
-                  | "{" "begin" Exp Exp "}"                   [strict(1)]
+                  | "{" "begin" Exp Exp "}"                           [strict(1)]
                   | "{" "lambda" "{}" Exp "}"
-                  | "{" Exp "}"                               [strict]
-                  | "{" "#%app" Thunk "}"                     [strict]
-                  | "{" "future" Exp "}"                      [strict]
-                  | "{" "touch" Exp "}"                       [strict]
-                  | "{" "debug-print" Exp "}"                 [strict]
+                  | "{" Exp "}"                                       [strict]
+                  | "{" "#%app" Thunk "}"                             [strict]
+                  | "{" "future" Exp "}"                              [strict]
+                  | "{" "touch" Exp "}"                               [strict]
+                  | "{" "debug-print" Exp "}"                         [strict]
   syntax Void     ::= "{" "void" "}"
 
   syntax Thunk  ::= "thunk" Exp
-  syntax Updatef ::= "updatef" Nat Exp                        [strict(2)]  
+  syntax Updatef ::= "updatef" Nat Exp                                [strict(2)]  
   syntax FDesc  ::= "fd" Nat                  
   syntax Barr   ::= "barricade"
 
-  syntax Val    ::= Int | Bool | Void | FDesc | Thunk
+  syntax Val    ::= Int | Bool | String | Void | FDesc | Thunk
   syntax KResult ::= Val
 
   rule <k> {debug-print I:Int} => {void} ... </k>
@@ -48,6 +49,8 @@ module FUTURES
        <out> ... . => ListItem("#t") ListItem("\n") </out>            [print-true]
   rule <k> {debug-print false} => {void} ... </k>
        <out> ... . => ListItem("#f") ListItem("\n") </out>            [print-false]
+  rule <k> {debug-print S:String} => {void} ... </k>
+       <out> ... . => ListItem(S) ListItem("\n") </out>               [print-string]
   rule <k> {debug-print V:Void} => {void} ... </k>
        <out> ... . => ListItem("#<void>") ListItem("\n") </out>       [print-void]
   rule <k> {debug-print F:FDesc} => {void} ... </k>
@@ -74,7 +77,7 @@ module FUTURES
 
   rule <k> {set! X:Id V:Val} => {void} ... </k>
        <env> ... X |-> N ... </env>
-       <store> ... N |-> (_ => V) ... </store>          [assignment]
+       <store> ... N |-> (_ => V) ... </store>                        [assignment]
 
   //Lookup
   rule <k> X:Id => V ... </k>
