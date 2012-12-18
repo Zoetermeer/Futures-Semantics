@@ -23,40 +23,39 @@ module FUTURES
                   | "{" "<=" Exp Exp "}"                              [seqstrict]
                   | "{" "not" Exp "}"                                 [strict]
                   | "{" "and" Exp Exp "}"                             [strict(1)]
-                  | "{" "let" "{" "[" Id Exp "]" "}" Exp "}"          [strict(2)]
+                  | "{" "let" "{" "{" Id Exp "}" "}" Exp "}"          [strict(2)]
                   | "{" "set!" Id Exp "}"                             [strict(2)]
                   | Void
                   | "{" "begin" Exp Exp "}"                           [strict(1)]
                   | "{" "lambda" "{}" Exp "}"
                   | "{" Exp "}"                                       [strict]
-                  | "{" "#%app" Thunk "}"                             [strict]
                   | "{" "future" Exp "}"                              [strict]
                   | "{" "touch" Exp "}"                               [strict]
                   | "{" "debug-print" Exp "}"                         [strict]
   syntax Void     ::= "{" "void" "}"
 
-  syntax Thunk  ::= "thunk" Exp
+  syntax Closure  ::= "closure" Exp Map
   syntax Updatef ::= "updatef" Nat Exp                                [strict(2)]  
   syntax FDesc  ::= "fd" Nat                  
   syntax Barr   ::= "barricade"
 
-  syntax Val    ::= Int | Bool | String | Void | FDesc | Thunk
+  syntax Val    ::= Int | Bool | String | Void | FDesc | Closure
   syntax KResult ::= Val
 
   rule <k> {debug-print I:Int} => {void} ... </k>
-       <out> ... . => ListItem(I) ListItem("\n") </out>               [print-int] 
+       <out> ... . => ListItem(I) ListItem("\n") </out>               [transition] 
   rule <k> {debug-print true} => {void} ... </k>
-       <out> ... . => ListItem("#t") ListItem("\n") </out>            [print-true]
+       <out> ... . => ListItem("#t") ListItem("\n") </out>            [transition]
   rule <k> {debug-print false} => {void} ... </k>
-       <out> ... . => ListItem("#f") ListItem("\n") </out>            [print-false]
+       <out> ... . => ListItem("#f") ListItem("\n") </out>            [transition]
   rule <k> {debug-print S:String} => {void} ... </k>
-       <out> ... . => ListItem(S) ListItem("\n") </out>               [print-string]
+       <out> ... . => ListItem(S) ListItem("\n") </out>               [transition]
   rule <k> {debug-print V:Void} => {void} ... </k>
-       <out> ... . => ListItem("#<void>") ListItem("\n") </out>       [print-void]
+       <out> ... . => ListItem("#<void>") ListItem("\n") </out>       [transition]
   rule <k> {debug-print F:FDesc} => {void} ... </k>
-       <out> ... . => ListItem("#<future>") ListItem("\n") </out>     [print-future]
-  rule <k> {debug-print T:Thunk} => {void} ... </k>
-       <out> ... . => ListItem("#<procedure>") ListItem("\n") </out>  [print-thunk]
+       <out> ... . => ListItem("#<future>") ListItem("\n") </out>     [transition]
+  rule <k> {debug-print C:Closure} => {void} ... </k>
+       <out> ... . => ListItem("#<procedure>") ListItem("\n") </out>  [transition]
 
   rule {not B:Bool} => notBool B
   rule {+ I1:Int I2:Int } => I1 +Int I2
@@ -73,58 +72,64 @@ module FUTURES
   rule {not B:Bool} => notBool B
   rule {and false _} => false
   rule {and true E:Exp} => E
-  rule <k> {let {[X:Id V:Val]} E:Exp} => E ... </k>
-       <env> Rho:Map => Rho[N/X] </env>
-       <store> ... . => N |-> V </store> 
-    when fresh(N:Nat)
+
+  syntax K ::= restoreEnv(Map)
+
+  rule <k> {let {{X:Id V:Val}} E:Exp} => E ~> restoreEnv(Rho) ... </k>
+       <env> Rho:Map => Rho[ADDR/X] </env>
+       <store> ... . => ADDR |-> V </store> 
+    when fresh(ADDR:Nat)
+
+  rule <k> V:Val ~> restoreEnv(Rho) => V ... </k>
+       <env> _ => Rho </env>
 
   rule <k> {set! X:Id V:Val} => {void} ... </k>
-       <env> ... X |-> N ... </env>
-       <store> ... N |-> (_ => V) ... </store>                        [assignment]
+       <env> ... X |-> ADDR ... </env>
+       <store> ... ADDR |-> (_ => V) ... </store>                        [transition]
 
   //Lookup
   rule <k> X:Id => V ... </k>
        <env> ... X |-> ADDR ... </env>
        <store> ... ADDR |-> V ... </store>
 
-  rule {begin V:Val E:Exp} => E
-  rule {lambda {} E:Exp} => thunk E
-  rule { (thunk E:Exp) } => E 
-
-  rule <k> {future (thunk E:Exp)} => fd N ... </k> 
+  rule {begin V:Val E} => E
+  rule <k> {lambda {} E} => closure E Rho ... </k>
        <env> Rho </env>
+  rule <k> { (closure E Rho) } => E ... </k>
+       <env> _ => Rho </env>
+
+  rule <k> {future (closure E Rho)} => fd FID ... </k> 
        (. =>  <future>...
                 <k> E </k>
                 <env> Rho </env>
-                <id> N </id>
+                <id> FID </id>
               </future>)
-    when fresh(N:Nat)
+    when fresh(FID:Nat)
 
   rule <future>...
-          <k> {touch (fd N:Nat)} => V:Val ... </k>
-          <id> "runtime" </id>
+          <k> {touch (fd FID:Nat)} => V:Val ... </k>
        </future>
        <future>...
           <k> V </k>
-          <id> N </id>
-       </future>                                                      [touch-completed]
+          <id> FID </id>
+       </future>                                                      [transition]
 
   rule <future>...
-          <k> {touch (fd N:Nat)} => updatef N E ... </k>
+          <k> {touch (fd FID:Nat)} => updatef FID E ... </k>
           <id> "runtime" </id>
        </future>
        <future>...
           <k> barricade ~> E ... </k>
-          <id> N </id>
-       </future>                                                      [touch-barricaded]
+          <id> FID </id>
+       </future>                                                      [transition]
 
   rule <future>
-          <k> updatef N:Nat V:Val => V ... </k>
+          <k> updatef FID:Nat V:Val => V ... </k>
           <id> "runtime" </id>
        </future>
        <future>
           <k> _ ... </k> => <k> V </k>
-          <id> N </id>
+          <id> FID </id>
        </future>
 
   rule <future>...
