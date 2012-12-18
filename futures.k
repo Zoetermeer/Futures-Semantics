@@ -63,7 +63,10 @@ module FUTURES
   rule {- I1:Int I2:Int } => I1 -Int I2
   rule {* I1:Int I2:Int } => I1 *Int I2
   rule {/ I1:Int I2:Int } => I1 /Int I2 when I2 =/=Int 0
-  rule <k> {/ I1:Int 0 } ... </k> => <k> "error: divBy0" </k>
+  rule <future>...
+          <k> {/ I1:Int 0} => barricade ~> {/ I1:Int 0} ... </k>
+          <id> N:Nat </id>
+       </future>
   rule {if true E1:Exp _} => E1
   rule {if false _ E2:Exp} => E2
   rule {<= I1:Int I2:Int} => I1 <=Int I2
@@ -97,91 +100,36 @@ module FUTURES
               </future>)
     when fresh(N:Nat)
 
-  /*
-  
-  (begin 
-    (future (lambda () (print "hello\n")))
-    (print "world")) 
-
-
-  rule <k> {/ I1:Int 0} => barricade ~> (/ I1:Int 0) ... </k>
-
-  rule <k> barricade ~> {/ I1:Int 0} => "error: div0" </k>
-        <future> ... <id> "runtime" </id> ... </future> 
-
-  rule {/ I1:Int I2:Int} => I1 /Int I2 when I2 =/=Int 0
-  rule {if true E1:AExp _} => E1
-
-  //Variable assignment
-  rule  <k> {set! X:Id V:Val} => void ... </k>
-        <env> ... X |-> N ... </env>
-        <store> ... N |-> {_ => V} ... </store>
-
-  //Variable lookup
-  rule  <k> X:Id => I ... </k>
-        <env> ... X |-> ADDR ... </env>
-        <store> ... ADDR |-> I ... </store>
-
-  //Variable declaration
-  rule  <k> {let ([X:Id V:Val]} Body:Exp) => Body ... </k>
-        <env> Rho:Map => Rho[N/X] </env>
-        <store> ... . => N |-> V </store>
-    when fresh{N:Nat}
-
-  //Evaluating multiple expressions
-  rule  <k> V:Val ~> E Es:Exp => E ~> Es ... </k>
-  rule <k> V:Val ~> .Exp => V ... </k>
-
-  rule .Exp => .                           [structural]
-  rule E:Exp ES:Exp => E ~> ES             [structural]
-
-  //Application
-  rule {lambda (} Es:Exp) => thunk Es
-  rule {app (thunk Es:Exp}) => Es
-  
-  //If all futures are sequential...
-  //rule {future T:Thunk} => (T)
-  
-  //Start a parallel future
-  rule  <k> {future thunk Es} => fd N ... </k> <env> Rho </env>
-        {. => <future> ... <k> Es </k> 
-                <env> Rho </env>
-                <id> N </id>
-              </future>} 
-    when fresh{N:Nat}
-
-  //Always execute {touch (future ...}) sequentially?
-  rule {touch (future TE:ThkExp}) => (TE)
-
-  //Touch a future which has finished 
-  //evaluating its thunk
-  rule <k> {touch fd N:Nat} => V:Val ... </k> 
-    <future> ... <k> V </k> <id> N </id> ... </future>
-
-  //Touching on a worker thread barricades
-  //rule  <k> {touch fd N:Nat} => barricade ~> (touch fd N:Nat) ... </k>
-  //      <future> ... <id> N </id> ... </future>
-  
-  //Barricaded ft: need to match on id of the 
-  //current config {"runtime"}, and also match on the k-cell
-  //of the ft config with id N.  How?
-  rule <future>
-            <k> {touch fd N:Nat} => updatef N Es:Exp ... </k>
-            <id> "runtime" </id>
+  rule <future>...
+          <k> {touch (fd N:Nat)} => V:Val ... </k>
+          <id> "runtime" </id>
        </future>
-          <future>
-            <k> barricade ~> Es ... </k>
-            <id> N </id>
-          </future>
+       <future>...
+          <k> V </k>
+          <id> N </id>
+       </future>                                                      [touch-completed]
 
+  rule <future>...
+          <k> {touch (fd N:Nat)} => updatef N E ... </k>
+          <id> "runtime" </id>
+       </future>
+       <future>...
+          <k> barricade ~> E ... </k>
+          <id> N </id>
+       </future>                                                      [touch-barricaded]
 
   rule <future>
-        <k> updatef N:Nat V:Val => V ... </k>
-        <id> "runtime" </id>
+          <k> updatef N:Nat V:Val => V ... </k>
+          <id> "runtime" </id>
        </future>
        <future>
-        <k> barricade ~> Es:Exp ... </k> => <k> V </k>
-        <id> N </id>
-      </future>
-  */
+          <k> _ ... </k> => <k> V </k>
+          <id> N </id>
+       </future>
+
+  rule <future>...
+          <k> {/ I1:Int 0} ... </k> => <k> "error: divBy0" </k>
+          <id> "runtime" </id>
+       </future>
+
 endmodule
